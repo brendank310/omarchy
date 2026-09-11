@@ -10,18 +10,18 @@ The installer asks how much RAM, how many CPU cores, and how much disk to hand o
 
 ## Using it
 
-Once it's installed, launch _Windows_ from the app launcher. That starts the VM if it isn't already running and connects you over RDP, full screen. Give it 15-30 seconds on a cold start.
+Once it's installed, launch _Windows_ from the app launcher. That starts the VM if it isn't already running and opens QEMU's GTK window on Wayland. Give it 15-30 seconds on a cold start.
 
-The RDP session carries sound, your microphone, and a shared clipboard, so copying text between Linux and Windows just works. The resolution follows your window, and Omarchy passes your display scaling through, so it's not a blurry mess on a HiDPI screen.
+The window is QEMU's own GTK display, talking to the compositor directly — not RDP, VNC, or X11. Grab-on-hover takes the keyboard and mouse; zoom-to-fit follows the window.
 
-When you close the RDP window, the VM shuts down automatically. If you'd rather leave it running — say you've got something working away in there — launch it with `omarchy windows vm launch --keep-alive` instead.
+When you close the QEMU window, the VM shuts down automatically. If you'd rather leave it running — say you've got something working away in there — launch it with `omarchy windows vm launch --keep-alive` instead.
 
 The rest of the controls are on the same command:
 
 ```bash
 omarchy windows vm status    # is it running?
 omarchy windows vm stop      # shut it down
-omarchy windows vm launch    # start and connect
+omarchy windows vm launch    # start and open the QEMU window
 ```
 
 ## Sharing files
@@ -34,7 +34,9 @@ Keep the disk and shared paths as separate, non-overlapping directories. Removal
 
 Before the VM starts, Omarchy opens and pins those two directories, then bind-mounts the exact directory inodes onto private per-user anchors below `/var/lib/omarchy/windows/mounts`. Docker only sees those root-protected anchors. This preserves custom disk locations while preventing another process running as you from swapping a checked path before the privileged container consumes it. Existing disk and shared directories are tightened to mode `0700` during migration so other local accounts cannot browse their contents.
 
-The VM's ports are bound to localhost only, so nothing on your network can reach the Windows machine. The web console also requires the configured Windows username and password, preventing another local account from driving the VM through port 8006.
+The VM's web status port is bound to localhost only, so nothing on your network can reach the Windows machine. The web console also requires the configured Windows username and password, preventing another local account from driving the VM through port 8006.
+
+If this computer shipped with Windows, bring-up also passes the host MSDM/SLIC tables and SMBIOS identity into QEMU so the guest can use the machine's OEM activation.
 
 ## Limits and licensing
 

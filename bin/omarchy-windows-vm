@@ -28,13 +28,18 @@ LEGACY_COMPOSE_FILE="$HOME/.config/windows/docker-compose.yml"
 OEM_FIRMWARE_DIR="$RUNTIME_DIR/oem-firmware"
 OEM_SETUP_DIR="$RUNTIME_DIR/oem-setup"
 OEM_OVERRIDE="$RUNTIME_DIR/docker-compose.oem.yml"
+DISPLAY_OVERRIDE="$RUNTIME_DIR/docker-compose.display.yml"
 OEM_GUEST_FIRMWARE="/oem-firmware"
 # The guest password lives in the root-owned compose (readable by root and the
-# docker group), but RDP needs it as the user. Keep a private copy here, 0600 in
-# the user's own config, so the plaintext password is never world-readable.
+# docker group). Keep a private copy here, 0600 in the user's own config, so
+# the plaintext password is never world-readable.
 CREDENTIALS_FILE="$HOME/.config/windows/credentials"
 IMAGE="dockurr/windows"
+GTK_IMAGE="omarchy-windows-gtk"
 CONTAINER="omarchy-windows"
+# In-container path for the Wayland socket. /root is 0700 root:root, which
+# satisfies XDG_RUNTIME_DIR for QEMU running as root. Do not use /tmp (1777).
+GUEST_RUNTIME_DIR="/root"
 VM_LOCK_DIR=/run/lock/omarchy-windows-vm
 # Removal is the only path that recursively proves there are no bind aliases.
 # Bound every metadata walk so a large or hostile caller tree fails closed
@@ -114,6 +119,18 @@ priv() {
   pkexec "$target" __priv "$action" "$@"
 }
 
+# Root writes the Wayland overlay next to the compose. Sudoless Docker runs
+# this as the user, who cannot create files in the root-owned runtime dir —
+# and is already docker-equivalent, so a per-session file under their
+# XDG_RUNTIME_DIR is the same privilege they already have.
+display_override_file() {
+  if ((EUID == 0)); then
+    printf '%s' "$DISPLAY_OVERRIDE"
+  else
+    printf '%s' "${XDG_RUNTIME_DIR:-/run/user/$EUID}/omarchy-windows-display.yml"
+  fi
+}
+
 assert_override_trusted() {
   local file="$1" owner expected mode
   [[ -f $file && ! -L $file ]] || return 1
@@ -124,13 +141,25 @@ assert_override_trusted() {
 }
 
 dc() {
-  local files=(-f "$COMPOSE_FILE")
+  local files=(-f "$COMPOSE_FILE") overlay
   if [[ -f $OEM_OVERRIDE ]]; then
     assert_override_trusted "$OEM_OVERRIDE" || {
       echo "omarchy-windows-vm: refusing an untrusted OEM compose overlay" >&2
       return 1
     }
     files+=(-f "$OEM_OVERRIDE")
+  fi
+  overlay=$(display_override_file)
+  if [[ -f $overlay ]]; then
+    if ((EUID == 0)) || [[ $overlay == "$DISPLAY_OVERRIDE" ]]; then
+      assert_override_trusted "$overlay" || {
+        echo "omarchy-windows-vm: refusing an untrusted display compose overlay" >&2
+        return 1
+      }
+    else
+      [[ ! -L $overlay ]] || return 1
+    fi
+    files+=(-f "$overlay")
   fi
   docker-compose "${files[@]}" "$@"
 }
@@ -165,6 +194,16 @@ valid_disk() { [[ $1 =~ ^[0-9]{1,4}G$ ]]; }
 valid_username() { [[ $1 =~ ^[A-Za-z0-9_-]{1,20}$ ]]; }
 valid_tz() { [[ $1 =~ ^[A-Za-z0-9_/.+-]{1,64}$ ]]; }
 valid_password() { [[ $1 =~ ^[[:print:]]{1,64}$ ]]; }
+valid_wayland_display() { [[ $1 =~ ^wayland-[0-9]+$ ]]; }
+valid_session_uid() { [[ $1 =~ ^[0-9]+$ ]]; }
+
+# GNU chmod treats "0700" as a 3-digit mode after stripping the leading zero,
+# so it preserves an existing setgid bit on directories. ~/Windows often lands
+# as 2700; the privileged bring-up then refuses it as not private. Name the
+# special bits explicitly.
+chmod_private_dir() {
+  chmod u=rwx,go=,a-st -- "$@"
+}
 
 # The only privileged sub-actions __priv may dispatch. A bash command name
 # containing a slash is executed as a path, so validating the action here — not
@@ -374,6 +413,139 @@ EOF
     return 1
   }
   mv -fT -- "$tmp" "$OEM_OVERRIDE"
+}
+
+session_uid() {
+  local uid
+  if ((EUID == 0)); then
+    uid=${PKEXEC_UID:-${SUDO_UID:-}}
+  else
+    uid=$EUID
+  fi
+  valid_session_uid "$uid" || return 1
+  printf '%s' "$uid"
+}
+
+# dockurr/windows ships QEMU 11 from Debian sid, but strips that source list.
+# Trixie's qemu-system-gui is QEMU 10 and cannot be installed beside it, so
+# re-enable sid just long enough to pull a matching GTK UI module.
+ensure_gtk_image() {
+  docker image inspect "$GTK_IMAGE" >/dev/null 2>&1 && return 0
+  echo "Building Windows VM image with QEMU GTK (one-time)..." >&2
+  docker build -t "$GTK_IMAGE" - <<'EOF'
+FROM dockurr/windows
+USER root
+RUN echo "deb http://deb.debian.org/debian sid main" > /etc/apt/sources.list.d/sid.list \
+ && apt-get update \
+ && QEMU_VER=$(dpkg-query -W -f='${Version}' qemu-system-modules-opengl) \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid \
+      "qemu-system-gui=${QEMU_VER}" \
+      libgl1 \
+      libwayland-client0 \
+      libwayland-egl1 \
+      libegl1 \
+ || DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends -t sid \
+      qemu-system-gui \
+      qemu-system-modules-opengl \
+      libgl1 \
+      libwayland-client0 \
+      libwayland-egl1 \
+      libegl1 \
+ && rm -f /etc/apt/sources.list.d/sid.list \
+ && rm -rf /var/lib/apt/lists/*
+EOF
+}
+
+# Wayland passthrough for QEMU's GTK backend. GDK_BACKEND=wayland is set so
+# GTK will not fall back to X11. Only the compositor socket (and optional
+# audio sockets) are bind-mounted — never the whole runtime directory.
+write_display_override() {
+  local wayland="$1"
+  local uid runtime socket tmp dest env_lines vol_lines real
+
+  valid_wayland_display "$wayland" || {
+    echo "omarchy-windows-vm: invalid Wayland display name" >&2
+    return 1
+  }
+  uid=$(session_uid) || {
+    echo "omarchy-windows-vm: could not determine the session user for display passthrough" >&2
+    return 1
+  }
+  runtime="/run/user/$uid"
+  socket="$runtime/$wayland"
+  if [[ -L $socket ]]; then
+    real=$(realpath "$socket" 2>/dev/null) || {
+      echo "omarchy-windows-vm: Wayland socket $socket is missing; the QEMU GTK display needs a Wayland session" >&2
+      return 1
+    }
+    case "$real" in
+    "$runtime"/*) ;;
+    *)
+      echo "omarchy-windows-vm: Wayland socket $socket resolves outside $runtime" >&2
+      return 1
+      ;;
+    esac
+    socket=$real
+  fi
+  if [[ ! -S $socket ]]; then
+    echo "omarchy-windows-vm: Wayland socket $socket is missing; the QEMU GTK display needs a Wayland session" >&2
+    return 1
+  fi
+
+  dest=$(display_override_file)
+  mkdir -p "$(dirname "$dest")" || return 1
+
+  env_lines=""
+  vol_lines=""
+  env_lines+=$'\n      DISPLAY: "gtk,zoom-to-fit=on,grab-on-hover=on"'
+  env_lines+=$'\n      GDK_BACKEND: "wayland"'
+  env_lines+=$'\n      XDG_SESSION_TYPE: "wayland"'
+  env_lines+=$'\n      WAYLAND_DISPLAY: "'"$wayland"'"'
+  env_lines+=$'\n      XDG_RUNTIME_DIR: "'"$GUEST_RUNTIME_DIR"'"'
+  vol_lines+=$'\n      - '"$socket:$GUEST_RUNTIME_DIR/$wayland"
+  if [[ -e $runtime/$wayland.lock && ! -L $runtime/$wayland.lock ]]; then
+    vol_lines+=$'\n      - '"$runtime/$wayland.lock:$GUEST_RUNTIME_DIR/$wayland.lock"
+  fi
+  if [[ -S $runtime/pulse/native && ! -L $runtime/pulse/native ]]; then
+    env_lines+=$'\n      PULSE_SERVER: "unix:'"$GUEST_RUNTIME_DIR"'/pulse-native"'
+    vol_lines+=$'\n      - '"$runtime/pulse/native:$GUEST_RUNTIME_DIR/pulse-native"
+  fi
+  if [[ -S $runtime/pipewire-0 && ! -L $runtime/pipewire-0 ]]; then
+    vol_lines+=$'\n      - '"$runtime/pipewire-0:$GUEST_RUNTIME_DIR/pipewire-0"
+  fi
+
+  tmp=$(mktemp "$(dirname "$dest")/.display-compose.XXXXXX") || return 1
+  # omarchy:heredoc-expands paths=none -- env_lines and vol_lines are assembled
+  # from an allowlisted Wayland display name and sockets under /run/user/$uid.
+  cat >"$tmp" <<EOF
+services:
+  windows:
+    image: $GTK_IMAGE
+    environment:$env_lines
+    volumes:$vol_lines
+EOF
+  chmod 0640 "$tmp" || { rm -f "$tmp"; return 1; }
+  if ((EUID == 0)); then
+    chown root:docker "$tmp" 2>/dev/null || chown root:root "$tmp" || {
+      rm -f "$tmp"
+      return 1
+    }
+  fi
+  mv -fT -- "$tmp" "$dest"
+}
+
+prepare_display_and_oem() {
+  local wayland="${1:-}"
+  if [[ -z $wayland ]]; then
+    if ((EUID == 0)) || [[ $RUNTIME_DIR == /var/lib/omarchy/windows ]]; then
+      echo "omarchy-windows-vm: missing Wayland display for the QEMU GTK display" >&2
+      return 1
+    fi
+    return 0
+  fi
+  write_display_override "$wayland" || return 1
+  ensure_gtk_image || return 1
+  write_oem_override
 }
 
 # Resolve the account that authorized pkexec. Never trust HOME or a caller-
@@ -803,9 +975,10 @@ prepare_caller_mounts() {
   # Privacy is an explicit preflight step for both already-pinned sources, not
   # a side effect halfway through the two-mount transaction. Old umask-022
   # installs are hardened together before either Docker-facing anchor changes.
-  chmod 0700 -- "/proc/$BASHPID/fd/$storage_fd" "/proc/$BASHPID/fd/$shared_fd" || {
+  chmod_private_dir "/proc/$BASHPID/fd/$storage_fd" "/proc/$BASHPID/fd/$shared_fd" || {
     exec {storage_fd}<&-
     exec {shared_fd}<&-
+    echo "omarchy-windows-vm: could not make VM data directories private" >&2
     return 1
   }
   storage_mode=$(stat -Lc '%a' "/proc/$BASHPID/fd/$storage_fd" 2>/dev/null) || storage_mode=""
@@ -813,6 +986,7 @@ prepare_caller_mounts() {
   if [[ $storage_mode != 700 || $shared_mode != 700 ]]; then
     exec {storage_fd}<&-
     exec {shared_fd}<&-
+    echo "omarchy-windows-vm: VM data directories must be mode 700 (storage=$storage_mode shared=$shared_mode)" >&2
     return 1
   fi
 
@@ -940,8 +1114,6 @@ services:
       - NET_ADMIN
     ports:
       - 127.0.0.1:8006:8006
-      - 127.0.0.1:3389:3389/tcp
-      - 127.0.0.1:3389:3389/udp
     volumes:
       - $EXPECTED_STORAGE:/storage
       - $EXPECTED_SHARED:/shared
@@ -1116,35 +1288,35 @@ assert_mounts_safe() {
   }
 }
 
-__priv_up() { assert_mounts_safe && write_oem_override && dc up -d; }
+__priv_up() {
+  assert_mounts_safe || return 1
+  prepare_display_and_oem "${1:-}" || return 1
+  dc up -d
+}
 
 __priv_down() { dc down; }
 
-# Bring the VM up and wait until the guest reports it is ready, all under a
-# single elevation so the readiness poll does not prompt on every iteration.
+# Start the VM and wait until the QEMU GTK window is closed (the container
+# exits), all under a single elevation so the wait does not prompt again.
 __priv_up_wait() {
+  local exit_code=0 status
+
   assert_mounts_safe || return 1
-  write_oem_override || return 1
-  local status
+  prepare_display_and_oem "${1:-}" || return 1
+
   status=$(docker inspect --format='{{.State.Status}}' "$CONTAINER" 2>/dev/null)
   if [[ $status != "running" ]]; then
     dc up -d || return 1
   fi
 
-  # docker logs persists across restarts, so anchor the scan to the current
-  # start time; an empty --since would match a stale "started successfully".
-  local started_at count=0
-  while true; do
-    started_at=$(docker inspect --format='{{.State.StartedAt}}' "$CONTAINER" 2>/dev/null)
-    if [[ -n $started_at ]] && docker logs --since "$started_at" "$CONTAINER" 2>&1 | grep -qi "windows started successfully"; then
-      return 0
-    fi
-    sleep 2
-    ((++count > 60)) && {
-      echo "Timeout: Windows VM did not report ready within 2 minutes" >&2
-      return 1
-    }
-  done
+  docker wait "$CONTAINER" >/dev/null || true
+  exit_code=$(docker inspect --format='{{.State.ExitCode}}' "$CONTAINER" 2>/dev/null || echo 1)
+  if [[ $exit_code != 0 ]]; then
+    echo "Windows VM exited with status $exit_code" >&2
+    docker logs --tail 80 "$CONTAINER" >&2 || true
+    return 1
+  fi
+  return 0
 }
 
 # Print the status (empty if the container does not exist) and always succeed,
@@ -1195,7 +1367,8 @@ __priv_remove() {
   umount -- "$EXPECTED_SHARED" || return 1
   umount -- "$EXPECTED_STORAGE" || return 1
   docker rmi "$IMAGE" 2>/dev/null || true
-  rm -f "$COMPOSE_FILE" "$OEM_OVERRIDE"
+  docker rmi "$GTK_IMAGE" 2>/dev/null || true
+  rm -f "$COMPOSE_FILE" "$OEM_OVERRIDE" "$DISPLAY_OVERRIDE"
   rm -rf "$OEM_FIRMWARE_DIR" "$OEM_SETUP_DIR"
   rmdir -- "$EXPECTED_STORAGE" "$EXPECTED_SHARED" "$CALLER_DATA_ROOT" 2>/dev/null || true
 }
@@ -1229,7 +1402,7 @@ preflight_user_mount_source() {
 }
 
 prepare_user_mount_sources() {
-  local storage="$HOME/.windows" shared="$HOME/Windows" storage_id shared_id
+  local storage="$HOME/.windows" shared="$HOME/Windows" storage_id shared_id storage_mode shared_mode
   preflight_user_mount_source "$storage" storage &&
     preflight_user_mount_source "$shared" shared || return 1
   [[ -e $storage || -L $storage ]] || install -d -m 0700 -- "$storage" || return 1
@@ -1240,7 +1413,13 @@ prepare_user_mount_sources() {
     echo "omarchy-windows-vm: storage and shared must be different directories" >&2
     return 1
   }
-  chmod 0700 -- "$storage" "$shared"
+  chmod_private_dir "$storage" "$shared" || return 1
+  storage_mode=$(stat -Lc '%a' -- "$storage") || return 1
+  shared_mode=$(stat -Lc '%a' -- "$shared") || return 1
+  [[ $storage_mode == 700 && $shared_mode == 700 ]] || {
+    echo "omarchy-windows-vm: could not make VM data directories private (storage=$storage_mode shared=$shared_mode)" >&2
+    return 1
+  }
 }
 
 storage_space_path() {
@@ -1315,6 +1494,23 @@ read_compose_value() {
   sed -n "s/.*${key}: \"\(.*\)\"/\1/p" "$file" | head -n1
 }
 
+session_wayland_display() {
+  local d=${WAYLAND_DISPLAY:-}
+  d=${d##*/}
+  valid_wayland_display "$d" || return 1
+  printf '%s' "$d"
+}
+
+require_wayland_display() {
+  local d
+  d=$(session_wayland_display) || {
+    echo "omarchy-windows-vm: a Wayland session is required for the QEMU GTK display" >&2
+    echo "   WAYLAND_DISPLAY is unset or invalid in this environment." >&2
+    return 1
+  }
+  printf '%s' "$d"
+}
+
 # Older installs kept the compose under ~/.config/windows. Carry those settings
 # into the root-owned location (preserving the VM's data via the same volume
 # paths) so an upgrade does not strand or re-download an existing VM.
@@ -1387,15 +1583,17 @@ install_windows() {
 
   prepare_user_mount_sources || exit 1
   check_prerequisites
+  local wayland
+  wayland=$(require_wayland_display) || exit 1
 
-  omarchy-pkg-add freerdp openbsd-netcat gum
+  omarchy-pkg-add gum
 
   mkdir -p "$HOME/.local/share/applications"
 
   cat <<EOF | tee "$HOME/.local/share/applications/windows-vm.desktop" >/dev/null
 [Desktop Entry]
 Name=Windows
-Comment=Start Windows VM via Docker and connect with RDP
+Comment=Start Windows VM via Docker and open the QEMU GTK display on Wayland
 Exec=uwsm app -- omarchy-windows-vm launch
 Icon=windows
 Terminal=false
@@ -1548,30 +1746,33 @@ EOF
   echo "Starting Windows VM installation..."
   echo "This will download a Windows 11 image (may take 10-15 minutes)."
   echo ""
-  echo "Monitor installation progress at: http://127.0.0.1:8006"
+  echo "Monitor download progress at: http://127.0.0.1:8006"
+  echo "Windows setup itself appears in the QEMU window."
   echo ""
 
   echo "Starting Windows VM with docker-compose..."
-  if ! priv up; then
+  if ! priv up "$wayland"; then
     echo "❌ Failed to start Windows VM!"
     echo "   Common issues:"
     echo "   - Docker daemon not running: sudo systemctl start docker"
     echo "   - Port already in use: check if another VM is running"
+    echo "   - No Wayland session for the QEMU GTK display"
     exit 1
   fi
 
   echo ""
   echo "Windows VM is starting up!"
   echo ""
-  echo "Opening browser to monitor installation..."
+  echo "Opening browser to monitor the download..."
 
-  # Open browser to monitor installation
+  # Open browser to monitor ISO download; the QEMU GTK window shows setup.
   sleep 3
   xdg-open "http://127.0.0.1:8006"
 
   echo ""
   echo "Installation is running in the background."
-  echo "You can monitor progress at: http://127.0.0.1:8006"
+  echo "You can monitor the download at: http://127.0.0.1:8006"
+  echo "The QEMU window is the Windows display."
   echo ""
   echo "Once finished, launch 'Windows' via Super + Space"
   echo ""
@@ -1621,31 +1822,22 @@ launch_windows() {
     fi
   fi
 
-  # RDP credentials come from the private per-user file. Fall back to the compose
-  # only when it is readable (sudoless mode), reversing the writer's escaping.
+  prepare_user_mount_sources || exit 1
+
+  local wayland
+  wayland=$(require_wayland_display) || exit 1
+
   WIN_USER=$(read_credential USERNAME) || WIN_USER=""
-  WIN_PASS=$(read_credential PASSWORD) || WIN_PASS=""
-  if [[ -z $WIN_USER || -z $WIN_PASS ]] && [[ -r $COMPOSE_FILE ]]; then
-    [[ -z $WIN_USER ]] && WIN_USER=$(unescape "$(read_compose_value USERNAME "$COMPOSE_FILE")")
-    [[ -z $WIN_PASS ]] && WIN_PASS=$(unescape "$(read_compose_value PASSWORD "$COMPOSE_FILE")")
+  if [[ -z $WIN_USER ]] && [[ -r $COMPOSE_FILE ]]; then
+    WIN_USER=$(unescape "$(read_compose_value USERNAME "$COMPOSE_FILE")")
   fi
   [[ -z $WIN_USER ]] && WIN_USER="docker"
-  [[ -z $WIN_PASS ]] && WIN_PASS="admin"
 
-  echo "Starting Windows VM (this may prompt for authorization)..."
-  if ! priv up_wait; then
-    echo "❌ Failed to start Windows VM!"
-    echo "   Try checking: omarchy-windows-vm status"
-    omarchy-notification-send -u critical "Windows VM" "Failed to start Windows VM"
-    exit 1
-  fi
-
-  # Build the connection info
   if [[ $KEEP_ALIVE = "true" ]]; then
-    LIFECYCLE="VM will keep running after RDP closes
-To stop: omarchy-windows-vm stop"
+    LIFECYCLE="VM will keep running after this command returns
+Close the QEMU window or run: omarchy-windows-vm stop"
   else
-    LIFECYCLE="VM will auto-stop when RDP closes"
+    LIFECYCLE="VM will auto-stop when the QEMU window closes"
   fi
 
   gum style \
@@ -1653,52 +1845,39 @@ To stop: omarchy-windows-vm stop"
     --padding "1 2" \
     --margin "1" \
     --align center \
-    "Connecting to Windows VM" \
+    "Starting Windows VM" \
     "" \
+    "Windows user: $WIN_USER" \
     "$LIFECYCLE"
 
-  # FreeRDP 3 tries Kerberos before NTLM for NLA, and krb5 ships /etc/krb5.conf
-  # as the MIT sample with default_realm = ATHENA.MIT.EDU. Every connect then
-  # goes looking for MIT's KDC: with internet up it fails fast, but off the
-  # network each attempt blocks ~23s and no RDP window is ever drawn. The VM
-  # authenticates against a local Windows account, so point FreeRDP at a
-  # realm-less config and let it fall straight through to NTLM.
-  KRB5_CONF="$HOME/.config/windows/krb5.conf"
-  mkdir -p "$(dirname "$KRB5_CONF")"
-  if [[ ! -f $KRB5_CONF ]]; then
-    printf '[libdefaults]\n  dns_lookup_kdc = false\n  dns_lookup_realm = false\n' >"$KRB5_CONF"
-  fi
-  export KRB5_CONFIG="$KRB5_CONF"
-
-  # Detect display scale from Hyprland
-  HYPR_SCALE=$(hyprctl monitors -j | jq -r '.[] | select (.focused == true) | .scale')
-  SCALE_PERCENT=$(echo "$HYPR_SCALE" | awk '{print int($1 * 100)}')
-
-  RDP_SCALE=""
-  if ((SCALE_PERCENT >= 170)); then
-    RDP_SCALE="/scale:180"
-  elif ((SCALE_PERCENT >= 130)); then
-    RDP_SCALE="/scale:140"
-  fi
-  # If scale is less than 130%, don't set any scale (use default 100)
-
-  # Connect with RDP in fullscreen (auto-detects resolution)
-  xfreerdp3 /u:"$WIN_USER" /p:"$WIN_PASS" /v:127.0.0.1:3389 -grab-keyboard /sound /microphone /clipboard /cert:ignore /title:"Windows VM - Omarchy" /dynamic-resolution /gfx:AVC444 /floatbar:sticky:off,default:visible,show:fullscreen $RDP_SCALE
-
-  # After RDP closes, stop the container unless --keep-alive was specified
-  if [[ $KEEP_ALIVE = "false" ]]; then
-    echo ""
-    echo "RDP session closed. Stopping Windows VM..."
-    if priv down; then
-      echo "Windows VM stopped."
-    else
-      echo "⚠️  Could not stop the Windows VM (authorization declined?)."
-      echo "   It may still be running. Stop it with: omarchy-windows-vm stop"
+  echo "Starting Windows VM (this may prompt for authorization)..."
+  if [[ $KEEP_ALIVE = "true" ]]; then
+    if ! priv up "$wayland"; then
+      echo "❌ Failed to start Windows VM!"
+      echo "   Try checking: omarchy-windows-vm status"
+      omarchy-notification-send -u critical "Windows VM" "Failed to start Windows VM"
+      exit 1
     fi
-  else
     echo ""
-    echo "RDP session closed. Windows VM is still running."
+    echo "Windows VM is running in the QEMU window."
     echo "To stop it: omarchy-windows-vm stop"
+    return 0
+  fi
+
+  if ! priv up_wait "$wayland"; then
+    echo "❌ Failed to start Windows VM!"
+    echo "   Try checking: omarchy-windows-vm status"
+    omarchy-notification-send -u critical "Windows VM" "Failed to start Windows VM"
+    exit 1
+  fi
+
+  echo ""
+  echo "QEMU window closed. Stopping Windows VM..."
+  if priv down; then
+    echo "Windows VM stopped."
+  else
+    echo "⚠️  Could not stop the Windows VM (authorization declined?)."
+    echo "   It may still be running. Stop it with: omarchy-windows-vm stop"
   fi
 }
 
@@ -1743,8 +1922,8 @@ status_windows() {
       --align left \
       "Windows VM Status: RUNNING" \
       "" \
-      "Web interface: http://127.0.0.1:8006" \
-      "RDP available: port 3389" \
+      "Display:    QEMU GTK on Wayland" \
+      "Web status: http://127.0.0.1:8006" \
       "" \
       "To connect: omarchy-windows-vm launch" \
       "To stop:    omarchy-windows-vm stop"
@@ -1760,17 +1939,17 @@ show_usage() {
   echo "Commands:"
   echo "  install              Install and configure Windows VM"
   echo "  remove               Remove Windows VM and optionally its data"
-  echo "  launch [options]     Start Windows VM (if needed) and connect via RDP"
+  echo "  launch [options]     Start Windows VM (if needed) and open the QEMU GTK display"
   echo "                       Options:"
-  echo "                         --keep-alive, -k   Keep VM running after RDP closes"
+  echo "                         --keep-alive, -k   Keep VM running after this command returns"
   echo "  stop                 Stop the running Windows VM"
   echo "  status               Show current VM status"
   echo "  help                 Show this help message"
   echo ""
   echo "Examples:"
   echo "  omarchy-windows-vm install           # Set up Windows VM for first time"
-  echo "  omarchy-windows-vm launch            # Connect to VM (auto-stop on exit)"
-  echo "  omarchy-windows-vm launch -k         # Connect to VM (keep running)"
+  echo "  omarchy-windows-vm launch            # Open the QEMU window (auto-stop on close)"
+  echo "  omarchy-windows-vm launch -k         # Open the QEMU window (keep running)"
   echo "  omarchy-windows-vm stop              # Shut down the VM"
 }
 

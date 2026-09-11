@@ -62,6 +62,8 @@ grep -q -- '- NET_ADMIN' "$COMPOSE" || fail "cap_add is pinned"
 grep -q -- "- $EXPECTED_STORAGE:/storage" "$COMPOSE" || fail "storage uses the protected anchor"
 grep -q -- "- $EXPECTED_SHARED:/shared" "$COMPOSE" || fail "shared uses the protected anchor"
 grep -q 'PROTECT: "Y"' "$COMPOSE" || fail "web console is not password protected"
+grep -q '5900' "$COMPOSE" && fail "compose must not publish VNC port 5900"
+grep -q '3389' "$COMPOSE" && fail "compose must not publish RDP port 3389"
 [[ ! -L $HOME/.windows && ! -L $HOME/Windows ]] || fail "fresh sources stay real directories"
 [[ $(stat -Lc '%d:%i' "$HOME/.windows") == $(stat -Lc '%d:%i' "$EXPECTED_STORAGE") ]] || fail "storage bind did not pin source"
 [[ $(stat -Lc '%d:%i' "$HOME/Windows") == $(stat -Lc '%d:%i' "$EXPECTED_SHARED") ]] || fail "shared bind did not pin source"
@@ -92,6 +94,30 @@ for action in '/../evil/x' bogus 'up;rm' '' '__priv_up'; do
   valid_priv_action "$action" && fail "action whitelist accepted: [$action]"
 done
 pass "privileged action dispatch is allowlisted"
+
+for d in wayland-0 wayland-1 wayland-12; do
+  valid_wayland_display "$d" || fail "valid_wayland_display rejected $d"
+done
+for d in wayland wayland- /tmp/wayland-0 '../wayland-0' 'wayland-0;rm' :0 gtk; do
+  valid_wayland_display "$d" && fail "valid_wayland_display accepted [$d]"
+done
+pass "valid_wayland_display accepts wayland-N and rejects everything else"
+
+write_display_override gtk 2>/dev/null && fail "write_display_override accepted a non-wayland display"
+write_display_override 'wayland-0;id' 2>/dev/null && fail "write_display_override accepted a malformed display name"
+write_display_override wayland-99 2>/dev/null && fail "write_display_override accepted a missing Wayland socket"
+pass "write_display_override rejects invalid or missing Wayland sockets"
+
+reset_case
+mkdir -m 2700 -p "$HOME/.windows" "$HOME/Windows"
+prepare_user_mount_sources
+[[ $(stat -Lc '%a' "$HOME/.windows") == 700 && $(stat -Lc '%a' "$HOME/Windows") == 700 ]] ||
+  fail "setgid directories were not made private"
+write 4G 2 64G alice s3cret UTC
+resolve_caller
+[[ $(stat -Lc '%a' "$EXPECTED_STORAGE") == 700 && $(stat -Lc '%a' "$EXPECTED_SHARED") == 700 ]] ||
+  fail "privileged bind left setgid sources"
+pass "setgid VM data directories are hardened to mode 700"
 
 # A PATH symlink to bash must never become the pkexec target. Hide the packaged
 # file from priv_target's stat checks to exercise the historical fallback.
