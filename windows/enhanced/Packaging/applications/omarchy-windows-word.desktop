@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Microsoft Word
+Comment=Run in the Windows VM
+Exec=omarchy-windows-app word
+Icon=x-office-document
+Terminal=false
+Categories=Office;WordProcessor;
+Keywords=Word;Office;Microsoft;Windows;
+StartupNotify=false

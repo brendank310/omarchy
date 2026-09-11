@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Microsoft Outlook
+Comment=Run in the Windows VM
+Exec=omarchy-windows-app outlook
+Icon=mail-client
+Terminal=false
+Categories=Office;Email;
+Keywords=Outlook;Office;Microsoft;Windows;
+StartupNotify=false

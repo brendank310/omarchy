@@ -1,0 +1,16 @@
+#!/bin/bash
+
+# omarchy:summary=Launch a component of the selected Office suite
+# omarchy:args=<document|spreadsheet|presentation>
+
+case ${1:-} in
+document) microsoft=word; libreoffice=--writer ;;
+spreadsheet) microsoft=excel; libreoffice=--calc ;;
+presentation) microsoft=powerpoint; libreoffice=--impress ;;
+*) echo "Usage: omarchy-launch-office <document|spreadsheet|presentation>" >&2; exit 1 ;;
+esac
+if [[ $(omarchy-default-office) == "microsoft" ]]; then
+  omarchy-windows-app "$microsoft"
+else
+  libreoffice "$libreoffice"
+fi

@@ -10,19 +10,31 @@ The installer asks how much RAM, how many CPU cores, and how much disk to hand o
 
 ## Using it
 
-Once it's installed, launch _Windows_ from the app launcher. That starts the VM if it isn't already running and connects you over RDP, full screen. Give it 15-30 seconds on a cold start.
+Once it's installed, launch _Windows_ from the app launcher. That starts the VM if it isn't already running and opens QEMU's GTK window on Wayland. Give it 15-30 seconds on a cold start.
 
-The RDP session carries sound, your microphone, and a shared clipboard, so copying text between Linux and Windows just works. The resolution follows your window, and Omarchy passes your display scaling through, so it's not a blurry mess on a HiDPI screen.
+The window is QEMU's own GTK display, talking to the compositor directly — not RDP, VNC, or X11. Grab-on-hover takes the keyboard and mouse; zoom-to-fit follows the window.
 
-When you close the RDP window, the VM shuts down automatically. If you'd rather leave it running — say you've got something working away in there — launch it with `omarchy windows vm launch --keep-alive` instead.
+When you close the QEMU window, the VM shuts down automatically. If you'd rather leave it running — say you've got something working away in there — launch it with `omarchy windows vm launch --keep-alive` instead.
 
 The rest of the controls are on the same command:
 
 ```bash
 omarchy windows vm status    # is it running?
 omarchy windows vm stop      # shut it down
-omarchy windows vm launch    # start and connect
+omarchy windows vm launch    # start and open the QEMU window
 ```
+
+## Microsoft Office integration
+
+With the optional `omarchy-windows-integration` package and its Windows guest service installed and configured, Word, Excel, PowerPoint and Outlook can each open in their own Omarchy window. Microsoft Office must also be installed in Windows.
+
+Run `omarchy setup windows office` to add the Office menu. Open _Setup > Defaults > Office Suite_ from the Super menu to choose Microsoft Office or LibreOffice. The _Office_ menu then opens documents, spreadsheets and presentations using that suite. This selection changes launchers only; it does not change which application opens existing files.
+
+Search the app launcher for _Microsoft Word_, _Microsoft Excel_, _Microsoft PowerPoint_ or _Microsoft Outlook_ to launch a particular application. Several applications can run at once. Resizing or focusing their Omarchy windows resizes or focuses the corresponding Windows application.
+
+Choose _Office > Windows Desktop_ or search for _Windows Desktop_ to access the entire guest desktop, including its taskbar and sign-in screen. You can also run `omarchy windows app desktop`. The desktop scales to fit the host window. The Super key stays with Omarchy; click the Windows Start button to open the guest Start menu.
+
+Closing an integration window leaves the VM running. Stop it with `omarchy windows vm stop` when finished. The desktop and application views share the same Windows session, so moving, minimizing or covering an application in the desktop view also affects its separate application window.
 
 ## Sharing files
 
@@ -34,7 +46,9 @@ Keep the disk and shared paths as separate, non-overlapping directories. Removal
 
 Before the VM starts, Omarchy opens and pins those two directories, then bind-mounts the exact directory inodes onto private per-user anchors below `/var/lib/omarchy/windows/mounts`. Docker only sees those root-protected anchors. This preserves custom disk locations while preventing another process running as you from swapping a checked path before the privileged container consumes it. Existing disk and shared directories are tightened to mode `0700` during migration so other local accounts cannot browse their contents.
 
-The VM's ports are bound to localhost only, so nothing on your network can reach the Windows machine. The web console also requires the configured Windows username and password, preventing another local account from driving the VM through port 8006.
+The VM's web status port is bound to localhost only, so nothing on your network can reach the Windows machine. The web console also requires the configured Windows username and password, preventing another local account from driving the VM through port 8006.
+
+If this computer shipped with Windows, bring-up also passes the host MSDM/SLIC tables and SMBIOS identity into QEMU so the guest can use the machine's OEM activation.
 
 ## Limits and licensing
 

@@ -1,0 +1,45 @@
+{
+  "office": {
+    "icon": "󰈙",
+    "label": "Office"
+  },
+  "office.document": {
+    "icon": "󰈙",
+    "label": "Document",
+    "action": "omarchy-launch-office document"
+  },
+  "office.spreadsheet": {
+    "icon": "󰓫",
+    "label": "Spreadsheet",
+    "action": "omarchy-launch-office spreadsheet"
+  },
+  "office.presentation": {
+    "icon": "󰐩",
+    "label": "Presentation",
+    "action": "omarchy-launch-office presentation"
+  },
+  "office.windows": {
+    "icon": "󰍲",
+    "label": "Windows Desktop",
+    "when": "omarchy-pkg-present omarchy-windows-integration",
+    "action": "omarchy-windows-app desktop"
+  },
+  "setup.default.office": {
+    "icon": "󰈙",
+    "label": "Office Suite",
+    "title": "Default Office Suite"
+  },
+  "setup.default.office.libreoffice": {
+    "icon": "󰈙",
+    "label": "LibreOffice",
+    "checked": "[[ \"$(omarchy-default-office)\" == \"libreoffice\" ]]",
+    "action": "omarchy-default-office libreoffice"
+  },
+  "setup.default.office.microsoft": {
+    "icon": "󰍲",
+    "label": "Microsoft Office",
+    "when": "omarchy-pkg-present omarchy-windows-integration",
+    "checked": "[[ \"$(omarchy-default-office)\" == \"microsoft\" ]]",
+    "action": "omarchy-default-office microsoft"
+  }
+}

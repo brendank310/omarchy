@@ -1,0 +1,40 @@
+pkgname=omarchy-windows-integration
+pkgver=0.1.0
+pkgrel=3
+pkgdesc='Native DMA-BUF Windows desktop and Microsoft Office integration for Omarchy'
+arch=('x86_64')
+license=('MIT')
+depends=('gtk3' 'libepoxy' 'json-glib' 'python' 'dbus' 'glib2' 'docker' 'docker-compose')
+makedepends=('gcc' 'make' 'pkgconf')
+source=('integration.tar.gz')
+sha256sums=('GENERATED_BY_BUILD_HOST')
+
+build() {
+  make -C "$srcdir/integration/windows/enhanced/Host"
+}
+
+check() {
+  make -C "$srcdir/integration/windows/enhanced/Host" check-input
+  python "$srcdir/integration/windows/enhanced/Host/test-launch.py"
+  python "$srcdir/integration/windows/enhanced/Host/test-broker.py"
+}
+
+package() {
+  local source="$srcdir/integration" host="$pkgdir/usr/lib/omarchy-windows/Host"
+  install -d "$host" "$pkgdir/usr/bin" "$pkgdir/usr/share/applications" "$pkgdir/usr/share/omarchy-windows"
+  install -m755 "$source/windows/enhanced/Host/enhanced-viewer" "$host/"
+  install -m644 "$source/windows/enhanced/Host/"*.py "$source/windows/enhanced/Host/display-bus.conf" "$source/windows/enhanced/Host/Dockerfile" "$host/"
+  install -m644 "$source/windows/enhanced/Packaging/enable-menu.py" "$pkgdir/usr/lib/omarchy-windows/"
+  install -m644 "$source/windows/enhanced/Smoke.py" "$pkgdir/usr/lib/omarchy-windows/"
+  install -m755 "$source/bin/omarchy-windows-app" "$source/bin/omarchy-launch-office" "$source/bin/omarchy-default-office" "$source/bin/omarchy-setup-windows-office" "$pkgdir/usr/bin/"
+  install -d "$pkgdir/usr/share/omarchy/bin"
+  local command
+  for command in omarchy-windows-app omarchy-launch-office omarchy-default-office omarchy-setup-windows-office; do
+    ln -s "/usr/bin/$command" "$pkgdir/usr/share/omarchy/bin/$command"
+  done
+  install -m644 "$source/windows/enhanced/Packaging/applications/"*.desktop "$pkgdir/usr/share/applications/"
+  install -m644 "$source/windows/enhanced/artifacts/EnhancedWindows-win-x64.zip" "$pkgdir/usr/share/omarchy-windows/"
+  install -m644 "$source/windows/enhanced/Packaging/menu.jsonc" "$pkgdir/usr/share/omarchy-windows/"
+  install -Dm644 "$source/LICENSE" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 "$source/windows/enhanced/Host/README.md" "$pkgdir/usr/share/doc/$pkgname/README.md"
+}

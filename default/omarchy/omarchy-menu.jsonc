@@ -22,6 +22,11 @@
 
   // Root Menu
   "apps": {"icon":"󰀻","label":"Apps","aliases":["app","applications"],"provider":"apps"},
+  "office": {"icon":"󰈙","label":"Office"},
+  "office.document": {"icon":"󰈙","label":"Document","action":"omarchy-launch-office document"},
+  "office.spreadsheet": {"icon":"󰓫","label":"Spreadsheet","action":"omarchy-launch-office spreadsheet"},
+  "office.presentation": {"icon":"󰐩","label":"Presentation","action":"omarchy-launch-office presentation"},
+  "office.windows": {"icon":"󰍲","label":"Windows Desktop","when":"omarchy-pkg-present omarchy-windows-integration","action":"omarchy-windows-app desktop"},
   "learn": {"icon":"󰧑","label":"Learn"},
   "trigger": {"icon":"󱓞","label":"Trigger"},
   "style": {"icon":"","label":"Style"},
@@ -149,6 +154,9 @@
   "setup.default.agent.opencode": {"icon":"","iconFont":"omarchy","label":"OpenCode","checked":"[[ \"$(omarchy-default-agent)\" == \"opencode\" ]]","action":"omarchy-default-agent opencode"},
   "setup.default.agent.ori": {"icon":"","iconFont":"omarchy","label":"Ori","checked":"[[ \"$(omarchy-default-agent)\" == \"ori\" ]]","action":"omarchy-default-agent ori"},
   "setup.default.agent.pi": {"icon":"","iconFont":"omarchy","label":"Pi","checked":"[[ \"$(omarchy-default-agent)\" == \"pi\" ]]","action":"omarchy-default-agent pi"},
+  "setup.default.office": {"icon":"󰈙","label":"Office Suite","title":"Default Office Suite"},
+  "setup.default.office.libreoffice": {"icon":"󰈙","label":"LibreOffice","checked":"[[ \"$(omarchy-default-office)\" == \"libreoffice\" ]]","action":"omarchy-default-office libreoffice"},
+  "setup.default.office.microsoft": {"icon":"󰍲","label":"Microsoft Office","when":"omarchy-pkg-present omarchy-windows-integration","checked":"[[ \"$(omarchy-default-office)\" == \"microsoft\" ]]","action":"omarchy-default-office microsoft"},
   "setup.default.browser": {"icon":"","label":"Browser","title":"Default Browser"},
   "setup.default.browser.chromium": {"icon":"","label":"Chromium","checked":"[[ \"$(omarchy-default-browser)\" == \"chromium\" ]]","action":"omarchy-default-browser chromium"},
   "setup.default.browser.chrome": {"icon":"󰊯","label":"Chrome","checked":"[[ \"$(omarchy-default-browser)\" == \"chrome\" ]]","action":"omarchy-default-browser chrome"},

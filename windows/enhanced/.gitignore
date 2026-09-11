@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+artifacts/
+**/__pycache__/
+
+Host/enhanced-viewer
+
+Host/test-input

@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# omarchy:summary=Choose the Office suite used by Omarchy's Office menu
+# omarchy:args=[libreoffice|microsoft]
+# omarchy:examples=omarchy default office microsoft | omarchy default office libreoffice
+
+selection_file="${XDG_CONFIG_HOME:-$HOME/.config}/omarchy/default-office"
+if (( $# == 0 )); then
+  if [[ -f $selection_file ]] && [[ $(cat "$selection_file") == "microsoft" ]]; then
+    echo microsoft
+  else
+    echo libreoffice
+  fi
+else
+  case $1 in
+  microsoft)
+    if [[ ! -x /usr/lib/omarchy-windows/Host/enhanced-viewer ]]; then
+      omarchy-notification-send -u critical "Windows integration is not installed" "Install the omarchy-windows-integration package first."
+      exit 1
+    fi
+    ;;
+  libreoffice) ;;
+  *) echo "Usage: omarchy-default-office [libreoffice|microsoft]" >&2; exit 1 ;;
+  esac
+  mkdir -p "$(dirname "$selection_file")"
+  printf '%s\n' "$1" >"$selection_file"
+  omarchy-menu refresh
+fi

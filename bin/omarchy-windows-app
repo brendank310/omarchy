@@ -1,0 +1,23 @@
+#!/bin/bash
+
+# omarchy:summary=Open a Windows application or the whole Windows desktop
+# omarchy:args=<word|excel|powerpoint|outlook|desktop>
+# omarchy:examples=omarchy windows app word | omarchy windows app desktop
+
+case ${1:-} in
+word | excel | powerpoint | outlook) selection=(--app "$1") ;;
+desktop) selection=(--desktop) ;;
+*) echo "Usage: omarchy-windows-app <word|excel|powerpoint|outlook|desktop>" >&2; exit 1 ;;
+esac
+if (( $# != 1 )); then
+  echo "This launcher accepts an application name, not document paths." >&2
+  exit 1
+fi
+if [[ ! -x /usr/lib/omarchy-windows/Host/enhanced-viewer ]]; then
+  omarchy-notification-send -u critical "Windows integration is not installed" "Install the omarchy-windows-integration package first."
+  exit 1
+fi
+python3 /usr/lib/omarchy-windows/Host/launch.py --start-vm "${selection[@]}" || {
+  omarchy-notification-send -u critical "Windows application could not open" "Check that Windows is signed in and the application is installed."
+  exit 1
+}

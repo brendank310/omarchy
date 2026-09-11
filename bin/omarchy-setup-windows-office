@@ -1,0 +1,6 @@
+#!/bin/bash
+
+# omarchy:summary=Add the installed Windows Office suite to the Super menu
+
+python3 /usr/lib/omarchy-windows/enable-menu.py || exit 1
+omarchy-menu refresh

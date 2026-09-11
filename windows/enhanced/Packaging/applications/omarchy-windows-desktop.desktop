@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Windows Desktop
+Comment=Whole Windows desktop
+Exec=omarchy-windows-app desktop
+Icon=computer
+Terminal=false
+Categories=System;Emulator;
+Keywords=Windows;Desktop;Virtual Machine;
+StartupNotify=false

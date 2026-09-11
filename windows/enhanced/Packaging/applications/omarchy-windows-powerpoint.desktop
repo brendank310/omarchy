@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Microsoft PowerPoint
+Comment=Run in the Windows VM
+Exec=omarchy-windows-app powerpoint
+Icon=x-office-presentation
+Terminal=false
+Categories=Office;Presentation;
+Keywords=PowerPoint;Office;Microsoft;Windows;
+StartupNotify=false
