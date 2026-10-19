@@ -22,3 +22,17 @@ chmod 0644 "$SNAPPER_CONF_PATH"
 
 systemctl disable --now snapper-timeline.timer >/dev/null 2>&1 || true
 systemctl enable --now snapper-cleanup.timer limine-snapper-sync.service >/dev/null 2>&1 || true
+# The combined enable above is a no-op when limine-snapper-sync is not installed,
+# which is every Apple Silicon machine. Enable cleanup on its own so that miss
+# does not leave snapshot retention off.
+systemctl enable --now snapper-cleanup.timer >/dev/null 2>&1 || true
+
+# A restore of a nested Btrfs snapshot on the Mac @ layout can leave an empty
+# placeholder where /.snapshots should be a subvolume. Repair only that layout.
+if [[ $(uname -m) == "aarch64" ]]; then
+  fsroot=$(findmnt -no FSROOT / 2>/dev/null || true)
+  snapshots_path=${OMARCHY_SNAPPER_SNAPSHOTS_PATH:-/.snapshots}
+  if [[ $fsroot == "/@" && ! -L $snapshots_path ]] && ! btrfs subvolume show "$snapshots_path" >/dev/null 2>&1; then
+    bash "${OMARCHY_PATH}/bin/omarchy-mac-snapper-backend" repair
+  fi
+fi

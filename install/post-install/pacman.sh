@@ -21,8 +21,12 @@ fi
 # rc on aarch64) gets the platform's default channel instead.
 channel=${OMARCHY_MIRROR:-}
 [[ -n $channel && -f $templates/pacman-$channel.conf ]] || channel=$(omarchy_pacman_default_channel "$platform")
-cp -f "$templates/pacman-$channel.conf" /etc/pacman.conf
-cp -f "$templates/mirrorlist-$channel" /etc/pacman.d/mirrorlist
+# The explicit source installer already validated and installed this config.
+# Preserve its repository order instead of replacing it with the template.
+if [[ ${OMARCHY_PRESERVE_PACMAN_CONFIG:-0} != "1" ]]; then
+  cp -f "$templates/pacman-$channel.conf" /etc/pacman.conf
+  cp -f "$templates/mirrorlist-$channel" /etc/pacman.d/mirrorlist
+fi
 
 # An image build leaves the keyring to each machine's first boot, so no two
 # share a master key (install/helpers/image-target.sh).

@@ -9,7 +9,14 @@ voxtype_lib_path="${OMARCHY_VOXTYPE_LIB_PATH:-/usr/lib/voxtype}"
 
 if omarchy-cmd-missing voxtype; then
   if gum confirm --affirmative "$(omarchy-i18n common.yes)" --negative "$(omarchy-i18n common.no)" "$(omarchy-i18n dictation.installVoxtype)"; then
-    omarchy-pkg-add wtype voxtype-bin
+    # voxtype-bin is an x86_64 prebuild. Apple Silicon builds the source package
+    # when that binary package is not published for aarch64.
+    if ! omarchy-hw-x86 && ! pacman -Si -- voxtype-bin &>/dev/null; then
+      omarchy-pkg-add wtype
+      omarchy-pkg-aur-add voxtype
+    else
+      omarchy-pkg-add wtype voxtype-bin
+    fi
   else
     exit 0
   fi

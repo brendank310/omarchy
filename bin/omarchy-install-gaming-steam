@@ -5,6 +5,12 @@
 
 set -e
 
+architecture=$(uname -m)
+if [[ $architecture == "aarch64" ]] && ! omarchy-pkg-present omarchy-steam-fex && ! omarchy-pkg-available omarchy-steam-fex; then
+  echo "Steam launcher package omarchy-steam-fex is unavailable" >&2
+  exit 1
+fi
+
 echo "Installing Steam..."
 
 # Install the lib32 drivers first. Steam depends on the virtual package
@@ -16,6 +22,15 @@ echo "Installing Steam..."
 omarchy-install-gaming-gpu-lib32
 omarchy-pkg-add steam
 omarchy-lifecycle-dispatch post-install steam
+
+if [[ $architecture == "aarch64" ]]; then
+  omarchy-pkg-add omarchy-steam-fex
+  if ! omarchy-pkg-present omarchy-steam-fex; then
+    echo "Steam launcher package omarchy-steam-fex is unavailable" >&2
+    exit 1
+  fi
+  omarchy-launch-steam --prepare
+fi
 
 echo ""
 echo "Steam will start automatically now. This might take a while..."

@@ -19,9 +19,10 @@
 # from the T2 era on. The BCM4360 in 2013-2015 Macs is deliberately absent: it
 # runs the out-of-tree wl driver, which never reads a brcmfmac option.
 #
-# Apple Silicon is excluded even though its BCM4387 is in that list: there the
-# firmware supplicant is what works, and disabling it makes firmware commands
-# time out and breaks scanning entirely.
+# Apple Silicon is excluded even though BCM4378 (4425) and BCM4387 (4433) are
+# in that list. There the firmware supplicant is what works: disable FWSUP and
+# FWAUTH on a BCM4387 and it never gets past authentication, then the firmware
+# wedges in brcmf_msgbuf_query_dcmd timeouts and scanning breaks (#7439).
 if omarchy-hw-aarch64-apple; then
   return 0
 fi

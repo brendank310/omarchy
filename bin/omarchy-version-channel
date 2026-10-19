@@ -2,6 +2,17 @@
 
 # omarchy:summary=Print the active Omarchy mirror and package channel
 
+# Installs that still point at the omarchy-mac aarch64 package repository name
+# the channel in that Server line. Upstream templates use pkgs.omarchy.org and
+# the ARM mirror instead, and fall through to the detection below.
+if [[ $(uname -m) == "aarch64" ]]; then
+  source "$OMARCHY_PATH/install/helpers/arm-channel.sh"
+  if channel=$(omarchy_arm_channel_current "${OMARCHY_PACMAN_CONFIG:-/etc/pacman.conf}"); then
+    echo "$channel"
+    exit 0
+  fi
+fi
+
 if grep -q "https://stable-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then
   mirror="stable"
 elif grep -q "https://rc-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then
@@ -20,6 +31,14 @@ elif grep -q "https://pkgs.omarchy.org/edge/" /etc/pacman.conf; then
   pkgs="edge"
 else
   pkgs="unknown"
+fi
+
+# aarch64 uses Omarchy's Arch Linux ARM mirror, which is not itself a stable/rc/edge
+# channel. The package server still names the channel. Treat that mirror as
+# agreeing with the package channel so Apple Silicon reports edge instead of
+# "unknown / edge".
+if [[ $mirror == "unknown" && $pkgs != "unknown" ]] && grep -q "https://arm-mirror.omarchy.org/" /etc/pacman.d/mirrorlist; then
+  mirror=$pkgs
 fi
 
 if [[ $mirror == $pkgs ]]; then

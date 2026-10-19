@@ -1,5 +1,6 @@
 # Ensure that F-keys on Apple-like keyboards (such as Lofree Flow84) are always F-keys.
-# Apple Silicon is left alone: the omarchy-mac package owns its keyboard mode.
+# Apple Silicon is left alone: the omarchy-mac package owns hid_apple fnmode=1
+# (media keys by default, Fn for F1-F12), which the Mac media bindings depend on.
 conf="${OMARCHY_HID_APPLE_CONF:-/etc/modprobe.d/hid_apple.conf}"
 if [[ ! -f $conf ]] && ! omarchy-hw-aarch64-apple; then
   sudo mkdir -p "$(dirname "$conf")"

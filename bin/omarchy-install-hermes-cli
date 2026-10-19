@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # omarchy:summary=Install Hermes Desktop for the default agent; its runtime provides the hermes command
-# omarchy:args=<--check|--now|--retire-mise>
+# omarchy:args=<--check|--now|--retire-mise|--owns|--remove>
 # omarchy:examples=omarchy install hermes cli --now | omarchy install hermes cli --check
 # omarchy:requires-sudo=true
 
@@ -326,10 +326,20 @@ case "$mode" in
 --check)
   if installed; then exit 0; else exit 1; fi
   ;;
---retire-mise)
-  # The migration's whole job. The environment goes before the wrapper, since
-  # once the wrapper is gone nothing marks the environment as Omarchy's and a
-  # rerun could not finish what a failed removal left behind.
+--owns)
+  # Callers that only delete the retired mise wrapper ask this rather than
+  # copying its marker. A link is someone else's arrangement, even when the
+  # file it names still carries the marker.
+  if [[ -f $command_path && ! -L $command_path ]] && grep -qxF "$legacy_marker" "$command_path"; then
+    exit 0
+  fi
+  exit 1
+  ;;
+--remove | --retire-mise)
+  # --retire-mise is the migration. --remove is the name the retired installer
+  # and Remove Preinstalls used for the same job: the environment goes before
+  # the wrapper, since once the wrapper is gone nothing marks the environment
+  # as Omarchy's and a rerun could not finish what a failed removal left behind.
   if legacy_owned; then
     retire_mise || exit 1
     forget_legacy
@@ -338,7 +348,7 @@ case "$mode" in
   ;;
 --now) ;;
 *)
-  echo "Usage: omarchy-install-hermes-cli <--check|--now|--retire-mise>" >&2
+  echo "Usage: omarchy-install-hermes-cli <--check|--now|--retire-mise|--owns|--remove>" >&2
   exit 1
   ;;
 esac

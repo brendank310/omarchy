@@ -510,7 +510,8 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    centerOnBar: true
+    // Follow the widget. A notch moves the center section off the middle of the screen.
+    centerOnBar: false
     focusTarget: panel.loadedContent
     contentWidth: panel.fittedContentWidth(Style.space(480))
     contentHeight: panel.fittedContentHeight(panel.loadedContentHeight)

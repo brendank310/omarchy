@@ -72,6 +72,10 @@ The manual lives in [`manual/`](manual/), which is its authoritative source.
 - [Dual Boot Install](manual/50-dual-boot-install.md)
 - [Unattended Installs](manual/51-unattended-installs.md)
 
+## Apple Silicon
+
+Apple Silicon is the `aarch64-apple` platform. Its package set is the base list, then `install/omarchy-aarch64.packages`, then `install/omarchy-aarch64-apple.packages`. Boot, update, and factory reset go through `omarchy-lifecycle-dispatch` and the external `omarchy-mac-boot` package. Pacman on that platform is the edge template in `default/pacman/aarch64-apple/` (Omarchy, Asahi ALARM, Arch Linux ARM, and the AUR), not the x86 channel files. The top bar reads camera cutouts from `/usr/share/omarchy-platform/display-cutouts.json` and grows to clear them. Screen recording on the Asahi GPU uses wf-recorder and encodes on the CPU. See [Mac support](manual/44-mac-support.md).
+
 ## License
 
 Omarchy is released under the [MIT License](https://opensource.org/licenses/MIT).

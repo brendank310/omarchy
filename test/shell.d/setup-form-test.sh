@@ -121,7 +121,7 @@ source "$ROOT/install/provisioning/setup-form.sh"
 
 ((OMARCHY_FORM_BACK == 1)) || fail "Esc reports status 1"
 ((OMARCHY_FORM_SIGNAL == 130)) || fail "Ctrl+C reports status 130"
-[[ $(printf '%s\n' "$OMARCHY_KEYBOARD_LAYOUTS" | head -n 1) == "English (US)|us" ]] ||
+[[ $(printf '%s\n' "$OMARCHY_KEYBOARD_LAYOUTS" | head -n 1) == "English (US)|us|us|" ]] ||
   fail "English (US) leads the keyboard layouts so gum choose opens on the default"
 pass "the form publishes the 0/1/130 status contract and leads with English (US)"
 

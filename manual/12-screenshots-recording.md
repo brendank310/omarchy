@@ -11,6 +11,12 @@ Everything you can grab off the screen hangs off the Print Screen key. One key o
 | `Super + Ctrl + Print Screen` | Extract text from a region |
 | `Super + Ctrl + C` | Capture menu |
 | `Super + Ctrl + .` | Transcode a picture or video |
+| `Super + F10` | Screenshot a window on an Apple keyboard |
+| `Super + F11` | Screenshot a region on an Apple keyboard |
+| `Super + F12` | Screenshot the full display on an Apple keyboard |
+| `Super + Alt + F12` | Fullscreen recording without audio on an Apple keyboard |
+
+Apple keyboards have no Print Screen key. The F-key rows above are bound, and so are the media keycodes the top row emits when it is in media mode, so the same shortcuts work with or without Fn.
 
 ## Screenshots
 
@@ -43,7 +49,7 @@ These bindings only exist while Omasnap is open, so they can't collide with anyt
 
 `Alt + Print Screen` opens _Trigger > Capture > Screenrecord_, which asks what you want on the soundtrack: no audio, desktop audio, desktop plus microphone, or desktop plus microphone plus webcam. That last one only shows up if you actually have a camera plugged in. Pick one and Omarchy's recording picker lets you drag a region or click a window or monitor.
 
-Recording runs on gpu-screen-recorder, which encodes on the GPU at 60fps and falls back to the CPU if it has to. The result is an MP4 in `~/Videos`, named `screenrecording-2026-08-13_14-22-05.mp4`. Set `OMARCHY_SCREENRECORD_DIR` to change that — but note that unlike the screenshot directory, this one has to exist already, or the recording refuses to start.
+Recording runs on gpu-screen-recorder, which encodes on the GPU at 60fps and falls back to the CPU if it has to. On Apple Silicon the Asahi GPU has no supported hardware encoder, so the same capture command uses wf-recorder and encodes on the CPU. `Super + Alt + F12` starts or stops a fullscreen recording with no audio. The result is an MP4 in `~/Videos`, named `screenrecording-2026-08-13_14-22-05.mp4`. Set `OMARCHY_SCREENRECORD_DIR` to change that — but note that unlike the screenshot directory, this one has to exist already, or the recording refuses to start.
 
 While you're recording, a little indicator shows up in the bar. Click it to stop. You can also stop with `Alt + Print Screen` again, or with the _Stop Screenrecording_ entry under _Trigger > Capture > Screenrecord_, which only appears while something is actually recording.
 

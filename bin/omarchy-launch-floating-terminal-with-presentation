@@ -9,6 +9,8 @@ source omarchy-restart-gum
 
 cmd="$*"
 # 130 is the user bailing with Ctrl-C; anything else gets the Done/Failed prompt.
-presentation_script="omarchy-show-logo; $cmd; code=\$?; if (( code != 130 )); then omarchy-show-done \$code; fi"
+# Exit with that status. The prompt used to be the last command, so a failure
+# or a cancel became 0 after the message.
+presentation_script="omarchy-show-logo; $cmd; code=\$?; if (( code != 130 )); then omarchy-show-done \$code; fi; exit \$code"
 
 exec setsid uwsm-app -- xdg-terminal-exec --app-id=org.omarchy.terminal --title=Omarchy -e bash -c "$presentation_script"

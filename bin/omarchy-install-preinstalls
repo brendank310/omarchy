@@ -15,20 +15,32 @@ if gum confirm --affirmative "$(omarchy-i18n common.yes)" --negative "$(omarchy-
     exit 1
   fi
 
-  # Mirrors the list in omarchy-remove-preinstalls; both track omarchy-base.packages
-  if ! omarchy-pkg-add \
-    aether \
-    cliamp \
-    libreoffice-fresh \
-    pinta \
-    obsidian \
-    moonlight-qt \
-    omacut \
-    monologue \
-    omacalc \
-    omawrite \
-    hype \
-    signed; then
+  # Mirrors the list in omarchy-remove-preinstalls; both track omarchy-base.packages.
+  # Obsidian's aarch64 output is obsidian-appimage, not the x86 package name.
+  # That is repository architecture, so uname -m is the check.
+  preinstall_packages=(
+    aether
+    cliamp
+    libreoffice-fresh
+    pinta
+    obsidian
+    moonlight-qt
+    omacut
+    monologue
+    omacalc
+    omawrite
+    hype
+    signed
+  )
+  if [[ $(uname -m) == "aarch64" ]]; then
+    for i in "${!preinstall_packages[@]}"; do
+      if [[ ${preinstall_packages[$i]} == "obsidian" ]]; then
+        preinstall_packages[$i]=obsidian-appimage
+      fi
+    done
+  fi
+
+  if ! omarchy-pkg-add "${preinstall_packages[@]}"; then
     echo -e "\nPreinstalls are still marked as removed. Fix the errors above and try again."
     exit 1
   fi

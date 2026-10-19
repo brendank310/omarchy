@@ -32,7 +32,7 @@ Windows folks: your Win + V clipboard history lives on `Super + Ctrl + V`, and i
 | ------------- | ---------- |
 | Spotlight / Raycast / Start menu | `Super + Space` — the Omarchy menu |
 | AirDrop | LocalSend, via `Super + Ctrl + S` — see [GUIs](22-guis.md) |
-| Cmd + Shift + 4 / Win + Shift + S | `Super + Shift + S` or `Print Screen` — see [screenshots & recording](12-screenshots-recording.md) |
+| Cmd + Shift + 4 / Win + Shift + S | `Super + Shift + S` or `Print Screen`; on an Apple keyboard, `Super + F10` (window), `Super + F11` (region), or `Super + F12` (full display) — see [screenshots & recording](12-screenshots-recording.md) |
 | Notification Center | Notification history on `Super + Shift + Alt + ,` |
 | Time Machine (for the system) | Automatic [system snapshots](47-system-snapshots.md) on every update |
 | App Store / downloading an installer | _Install_ in the menu, or `omarchy pkg add` — see [other packages](29-other-packages.md) |
@@ -50,7 +50,7 @@ And when you close a window, the app actually quits. There's no macOS limbo wher
 
 ### On Mac hardware
 
-Omarchy runs well on Intel Macs — see [Mac support](44-mac-support.md). And the keyboard is kind to you: Omarchy doesn't remap anything, and Linux treats the Command key as Super, so Super sits right where Cmd always was. Your thumb won't notice the move.
+Omarchy runs well on Intel Macs — see [Mac support](44-mac-support.md). And the keyboard is kind to you: Omarchy doesn't remap anything, and Linux treats the Command key as Super, so Super sits right where Cmd always was. Your thumb won't notice the move. On Apple Silicon the top row stays in macOS order: media keys without Fn, and Fn for F1–F12. Shift with the brightness keys changes the keyboard backlight, because those machines have no separate keyboard-brightness key.
 
 ### Give it two weeks
 

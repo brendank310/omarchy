@@ -819,6 +819,10 @@
   "install.ai.claude": {
     "label": "Claude Desktop"
   },
+  "install.ai.mlx": {
+    "label": "MLX (Apple GPU)",
+    "description": "Apple MLX on the M1 GPU via Vulkan, with a chat demo"
+  },
   "install.ai.grok-bot": {
     "label": "Grok Bot"
   },
@@ -1031,6 +1035,9 @@
   },
   "remove.ai.claude": {
     "label": "Claude Desktop"
+  },
+  "remove.ai.mlx": {
+    "label": "MLX (Apple GPU)"
   },
   "remove.dictation.superwhisper": {
     "label": "Superwhisper"

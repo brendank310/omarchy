@@ -114,7 +114,14 @@ start_webcam_overlay() {
     fi
   done
 
-  mpv "av://v4l2:$WEBCAM_DEVICE" \
+  local renderer_options=()
+  if omarchy-hw-aarch64-apple; then
+    # gpu-next crashes while releasing live camera frames on Asahi with both
+    # Vulkan and OpenGL. The older OpenGL renderer avoids that upload path.
+    renderer_options=(--vo=gpu --gpu-api=opengl)
+  fi
+
+  mpv "av://v4l2:$WEBCAM_DEVICE" "${renderer_options[@]}" \
     --profile=low-latency --untimed --no-cache \
     --demuxer-lavf-o="$capture_options" \
     '--vf=lavfi=[crop=ih*8/9:ih]' \
@@ -178,6 +185,13 @@ select_capture_target() {
 # packages carry gpu-screen-recorder, but an architecture may build none.
 recorder_backends() {
   local backend found=false
+
+  # gpu-screen-recorder finds no display device on Apple Silicon: the display
+  # and the GPU are separate DRM devices. Record with wf-recorder directly.
+  if omarchy-hw-aarch64-apple && omarchy-cmd-present wf-recorder; then
+    echo wf-recorder
+    return
+  fi
 
   for backend in gpu-screen-recorder wf-recorder; do
     if omarchy-cmd-present "$backend"; then

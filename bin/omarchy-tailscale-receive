@@ -27,7 +27,8 @@ mkdir -p "$staging"
 # directory, so the link always resolves and unlinking the staged name
 # finishes the move. Prints the name it took.
 claim_path() {
-  local staged="$1" name="${staged##*/}" base ext candidate index=0
+  local staged="$1"
+  local name="${staged##*/}" base ext candidate index=0
 
   base="${name%.*}"
   ext="${name#"$base"}"
@@ -40,6 +41,14 @@ claim_path() {
       candidate="$dir/$base-$index$ext"
     fi
 
+    # ln treats an existing directory as a container, so it would otherwise
+    # create `$candidate/$name` and report the directory as the destination.
+    # A dangling symlink is occupied too, even though -e does not see it.
+    if [[ -e $candidate || -L $candidate ]]; then
+      index=$((index + 1))
+      continue
+    fi
+
     if ln -- "$staged" "$candidate" 2>/dev/null; then
       rm -f -- "$staged"
       printf '%s\n' "$candidate"
@@ -48,9 +57,9 @@ claim_path() {
 
     # Only a taken name is worth another spin. Anything else failed the link
     # itself, and the file keeps its place in staging for the next run.
-    [[ -e $candidate ]] || return 1
+    [[ -e $candidate || -L $candidate ]] || return 1
 
-    ((index++))
+    index=$((index + 1))
   done
 
   return 1
@@ -70,10 +79,10 @@ announce() {
 deliver() {
   local staged target
 
-  while IFS= read -r staged; do
+  while IFS= read -r -d '' staged; do
     target=$(claim_path "$staged") || continue
     announce "$target"
-  done < <(find "$staging" -mindepth 1 -maxdepth 1)
+  done < <(find "$staging" -mindepth 1 -maxdepth 1 -print0)
 }
 
 # Anything left staged by an interrupted run still deserves delivering.

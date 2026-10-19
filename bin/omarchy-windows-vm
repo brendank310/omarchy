@@ -7,6 +7,9 @@
 # The VM is an x86_64 Windows guest under KVM, which only an x86_64 host runs.
 if ! omarchy-hw-x86; then
   echo "Windows VM needs an x86_64 machine (it runs an x86_64 guest under KVM)." >&2
+  if omarchy-hw-aarch64-apple; then
+    echo "On Apple Silicon, use Parallels, VMware Fusion, or UTM." >&2
+  fi
   exit 1
 fi
 

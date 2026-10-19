@@ -39,17 +39,32 @@ if gum confirm --affirmative "$(omarchy-i18n common.yes)" --negative "$(omarchy-
     rm -f ~/.local/bin/muse
   fi
 
-  omarchy-pkg-drop \
-    aether \
-    cliamp \
-    libreoffice-fresh \
-    pinta \
-    obsidian \
-    moonlight-qt \
-    omacut \
-    monologue \
-    omacalc \
-    omawrite \
-    hype \
+  # The retired Hermes mise wrapper is not a desktop-app command. Only the
+  # installer knows its marker, and --remove is a no-op when that wrapper is gone.
+  omarchy-install-hermes-cli --remove || exit 1
+
+  # Mirrors the list in omarchy-install-preinstalls; both track omarchy-base.packages.
+  # Obsidian's aarch64 output is obsidian-appimage, not the x86 package name.
+  preinstall_packages=(
+    aether
+    cliamp
+    libreoffice-fresh
+    pinta
+    obsidian
+    moonlight-qt
+    omacut
+    monologue
+    omacalc
+    omawrite
+    hype
     signed
+  )
+  if [[ $(uname -m) == "aarch64" ]]; then
+    for i in "${!preinstall_packages[@]}"; do
+      if [[ ${preinstall_packages[$i]} == "obsidian" ]]; then
+        preinstall_packages[$i]=obsidian-appimage
+      fi
+    done
+  fi
+  omarchy-pkg-drop "${preinstall_packages[@]}"
 fi

@@ -298,7 +298,8 @@ assert(
 assert(!defaultById['install.ai.crush'], 'menu removes Crush from Install > AI')
 // Software you already have keeps its place in Install, dimmed rather than
 // dropped, so the list reads as a catalog of what Omarchy can install.
-// Chromium Account is the sole Install row with anything left to hide for. The
+// Chromium Account hides when there is no Chromium config. Steam hides on
+// aarch64 when its FEX launcher package is not in the repos. The
 // Windows VM, whose guest can't run elsewhere, and the installers that need
 // x86_64 binaries (vendor builds for x86_64 alone, Windows games under Wine)
 // hide only off x86_64. Dropbox's x86_64 client runs under box64 on ARM, which
@@ -313,7 +314,7 @@ assertDeepEqual(
     .filter(item => item.id.startsWith('install.') && item.action && item.when)
     .map(item => item.id)
     .sort(),
-  [...x86OnlyInstalls, 'install.service.dropbox', 'install.service.chromium-account'].sort(),
+  [...x86OnlyInstalls, 'install.service.dropbox', 'install.service.chromium-account', 'install.gaming.steam'].sort(),
   'menu never hides an Install row because the software is already there'
 )
 assert(
@@ -331,10 +332,15 @@ assert(
   'menu offers Spotify on every platform and dims it once its client or web player is installed'
 )
 assert(
-  ['install.browser.zen', 'install.editor.vscode', 'install.gaming.steam', 'install.development.rust', 'install.windows'].every(
+  ['install.browser.zen', 'install.editor.vscode', 'install.development.rust', 'install.windows'].every(
     id => defaultById[id].disabled && (!defaultById[id].when || defaultById[id].when === windowsGuard)
   ),
   'menu dims the Install rows for software that is already installed'
+)
+assert(
+  defaultById['install.gaming.steam'].disabled.includes('omarchy-pkg-present steam') &&
+    defaultById['install.gaming.steam'].when.includes('omarchy-pkg-available omarchy-steam-fex'),
+  'menu dims Steam once it is installed and hides it on aarch64 when the FEX launcher is unavailable'
 )
 assertEqual(
   defaultById['install.browser.zen'].disabled,

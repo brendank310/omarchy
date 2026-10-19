@@ -57,11 +57,54 @@ if ((${#matched[@]} == 0)); then
   exit 1
 fi
 
+# Open a pidfd before re-checking the executable, so a pid reused after the
+# scan cannot receive the signal. Without pidfd, re-check and kill, which only
+# narrows that window. Identity is read from proc_root (tests substitute it);
+# the pidfd is always the live process.
+signal_recorder() {
+  local pid=$1 status=0
+
+  python3 - "$pid" "$signal" "$proc_root" <<'PY'
+import os
+import signal
+import sys
+from pathlib import Path
+
+pid = int(sys.argv[1])
+signum = getattr(signal, "SIG" + sys.argv[2])
+proc = Path(sys.argv[3]) / str(pid)
+recorders = {"gpu-screen-recorder", "wf-recorder"}
+try:
+    fd = os.pidfd_open(pid)
+except AttributeError:
+    sys.exit(2)
+except OSError:
+    sys.exit(1)
+try:
+    if os.stat(proc).st_uid != os.geteuid():
+        sys.exit(1)
+    exe = os.readlink(proc / "exe")
+    exe = exe.removesuffix(" (deleted)")
+    if Path(exe).name not in recorders:
+        sys.exit(1)
+    signal.pidfd_send_signal(fd, signum)
+except OSError:
+    sys.exit(1)
+finally:
+    os.close(fd)
+PY
+  status=$?
+  if (( status == 2 || status == 127 )); then
+    is_recorder "$pid" && kill "-$signal" "$pid" 2>/dev/null
+    return
+  fi
+  (( status == 0 ))
+}
+
 if [[ -n $signal ]]; then
   delivered=0
   for pid in "${matched[@]}"; do
-    # The pid can be reused between discovery and kill; re-checking exe here narrows that window.
-    if is_recorder "$pid" && kill "-$signal" "$pid" 2>/dev/null; then
+    if signal_recorder "$pid"; then
       delivered=1
     fi
   done

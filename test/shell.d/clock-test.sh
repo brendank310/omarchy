@@ -322,6 +322,8 @@ assert(/date\.toLocaleString\(root\.formatLocale,/.test(widgetSource), 'bar cloc
 assert(/standaloneMonthName\(viewMonth/.test(panelCode), 'calendar title uses the standalone month name')
 JS
 
+# The clock sits in the center section. A notch moves that section beside the
+# right one at draw time; the shipped layout still names the clock as center.
 shell_json=$(cd "$ROOT" && jq -r '[.bar.layout.center[].id] | join(",")' config/omarchy/shell.json)
 [[ $shell_json == *"omarchy.clock"* ]] || fail "default bar layout includes the clock widget" "center: $shell_json"
 [[ $shell_json != *"omarchy.calendar"* ]] || fail "clock hosts the calendar instead of a second bar pill" "center: $shell_json"

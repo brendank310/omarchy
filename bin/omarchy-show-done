@@ -5,6 +5,10 @@
 
 code="${1:-0}"
 
+# A status that is not a number is a caller bug, and claiming success would be
+# the worse failure of the two, so treat it as a failure.
+[[ $code =~ ^[0-9]+$ ]] || code=1
+
 # The device node is there whether or not a terminal is behind it, so opening
 # it is the only test that means anything.
 : 2>/dev/null <>/dev/tty || exit 0

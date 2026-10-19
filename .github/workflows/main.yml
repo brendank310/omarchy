@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
+jobs:
+  syntax:
+    name: Syntax + shellcheck
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Syntax-check bin/omarchy, bin/omarchy-*, test/vm/*
+        run: |
+          failed=()
+          shopt -s nullglob
+          for f in bin/omarchy bin/omarchy-* test/vm/*; do
+            [[ -f $f ]] || continue
+            if head -1 "$f" | grep -q python; then
+              python3 -c 'import ast,sys; ast.parse(open(sys.argv[1]).read())' "$f" || failed+=("$f")
+            else
+              bash -n "$f" || failed+=("$f")
+            fi
+          done
+          if (( ${#failed[@]} > 0 )); then
+            printf '%s\n' "${failed[@]}" >&2
+            exit 1
+          fi
+
+      - name: Syntax-check tracked *.sh
+        run: |
+          failed=()
+          while IFS= read -r -d '' f; do
+            bash -n "$f" || failed+=("$f")
+          done < <(git ls-files -z -- '*.sh')
+          if (( ${#failed[@]} > 0 )); then
+            printf '%s\n' "${failed[@]}" >&2
+            exit 1
+          fi
+
+      - name: shellcheck
+        run: |
+          # install/ and many tests are sourced and omit shebangs; --shell=bash
+          # is the contract. Fixtures are intentionally invalid snippets.
+          # Tests stub commands as functions defined later (SC2218). SC1087,
+          # SC1113, and SC2096 fire on ANSI sequences and comments that look
+          # like shebangs, not on real errors.
+          mapfile -t files < <(git ls-files -- '*.sh' | grep -vE '^(migrations/|test/)' || true)
+          (( ${#files[@]} > 0 )) || exit 0
+          shellcheck --version
+          shellcheck --shell=bash -S error -e SC1090,SC1091,SC1087,SC1113,SC2096,SC2218 "${files[@]}"
+
+  test:
+    name: test/all
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Read package recipe pin
+        id: recipes
+        run: echo "revision=$(cat build-inputs/omarchy-pkgs-revision)" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout omarchy-pkgs
+        uses: actions/checkout@v4
+        with:
+          repository: omacom/omarchy-pkgs
+          ref: ${{ steps.recipes.outputs.revision }}
+          path: omarchy-pkgs
+          persist-credentials: false
+
+      - name: Install test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-yaml jq lua5.4 imagemagick libxkbcommon-tools ripgrep desktop-file-utils pacman-package-manager
+          sudo ln -sf /usr/bin/lua5.4 /usr/local/bin/lua
+          if ! command -v magick >/dev/null; then
+            sudo ln -sf "$(command -v convert)" /usr/local/bin/magick
+          fi
+
+      - name: Run ./test/all
+        env:
+          OMARCHY_PATH: ${{ github.workspace }}
+          OMARCHY_PKGS_PATH: ${{ github.workspace }}/omarchy-pkgs
+        run: |
+          export PATH="$GITHUB_WORKSPACE/bin:$PATH"
+          ./test/all
+
+  mac:
+    name: tests/all
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run ./tests/all
+        run: ./tests/all

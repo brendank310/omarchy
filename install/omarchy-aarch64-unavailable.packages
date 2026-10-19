@@ -1,0 +1,30 @@
+# Default ARM exclusions pending qualification. The filename is retained for
+# compatibility; membership does not establish that no ARM package exists.
+# Historical installation attempts encountered failed builds, missing targets,
+# or unsuitable dependency paths. Repository packages and providers may now be
+# available, but their installation and Apple Silicon runtime still need review.
+#
+# The installer offers an explicit attempt when it has a terminal, and
+# OMARCHY_TRY_UNAVAILABLE=1 opts in without a prompt. Keep the default exclusion
+# until a suitable installation path and ARM behavior have been qualified.
+
+# Earlier attempts could not resolve this default target. The 4.0.3 RC audit
+# found dotnet-runtime-bin providing dotnet-runtime. Provider availability does
+# not establish compatibility with every application's runtime requirements.
+dotnet-runtime
+
+
+# A historical AUR attempt installed build dependencies before pinta failed an
+# architecture check. The 4.0.3 RC audit found an ARM pinta package; its current
+# dependency path and application behavior remain part of qualification.
+pinta
+
+# A previous AUR attempt used a pkgbase rather than a binary package name and
+# installed dependencies without a usable application. This default still
+# needs a qualified source/package selection and Apple Silicon runtime check.
+obsidian
+
+# Arch Linux ARM explicitly removes the static QEMU build. Dynamic qemu-user
+# and qemu-user-binfmt are not replacements for static foreign-root execution.
+# Preserve any existing static installation while this default remains excluded.
+qemu-user-static-binfmt

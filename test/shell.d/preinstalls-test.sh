@@ -126,6 +126,10 @@ dropped:  ${dropped[*]}"
 pass "Install and Remove Preinstalls cover the same packages"
 
 for package in "${restored[@]}"; do
+  if [[ $package == "obsidian-appimage" ]]; then
+    [[ $(uname -m) == "aarch64" ]] || fail "obsidian-appimage is only the aarch64 Obsidian package"
+    continue
+  fi
   printf '%s\n' "${shipped[@]}" | grep -qxF "$package" ||
     fail "every preinstall is shipped in omarchy-base.packages" "$package is not shipped"
 done

@@ -5,15 +5,32 @@
 # omarchy:examples=omarchy pkg add jq ripgrep
 # omarchy:requires-sudo=true
 
-if omarchy-pkg-missing "$@"; then
+packages=("$@")
+# aarch64 repos do not carry every x86-only package migrations ask for. Skip
+# those with a warning so one missing name does not fail the migration. x86
+# still fails closed, because a missing package there is a real error.
+if ! omarchy-hw-x86; then
+  available=()
+  for pkg in "${packages[@]}"; do
+    if pacman -Q -- "$pkg" &>/dev/null || pacman -Si -- "$pkg" &>/dev/null; then
+      available+=("$pkg")
+    else
+      echo -e "\033[33mSkipping '$pkg': not available in the repos on this system\033[0m" >&2
+    fi
+  done
+  (( ${#available[@]} )) || exit 0
+  packages=("${available[@]}")
+fi
+
+if omarchy-pkg-missing "${packages[@]}"; then
   if (( EUID == 0 )); then
-    pacman -S --noconfirm --needed -- "$@" || exit 1
+    pacman -S --noconfirm --needed -- "${packages[@]}" || exit 1
   else
-    sudo pacman -S --noconfirm --needed -- "$@" || exit 1
+    sudo pacman -S --noconfirm --needed -- "${packages[@]}" || exit 1
   fi
 fi
 
-for pkg in "$@"; do
+for pkg in "${packages[@]}"; do
   # Secondary check to handle states where pacman doesn't actually register an error
   if ! pacman -Q -- "$pkg" &>/dev/null; then
     echo -e "\033[31mError: Package '$pkg' did not install\033[0m" >&2
